@@ -664,10 +664,13 @@ export default function App() {
         group.allowCombos === existingGroup.allowCombos &&
         group.allowOverdraft === existingGroup.allowOverdraft &&
         group.seasonStarted === existingGroup.seasonStarted &&
-        Object.keys(group.members).length === Object.keys(existingGroup.members).length &&
-        Object.keys(group.members).every(uid => {
+        Object.keys(existingGroup.members).every(uid => {
           if (uid === currentUid) return true;
           return JSON.stringify(group.members[uid]) === JSON.stringify(existingGroup.members[uid]);
+        }) &&
+        Object.keys(group.members).every(uid => {
+          if (uid === currentUid) return true;
+          return existingGroup.members[uid] !== undefined;
         });
 
       if (!isOnlyUpdatingOwnMember && group.adminId !== currentUid) {
