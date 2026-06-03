@@ -23,7 +23,7 @@ import {
   logInWithEmail, 
   logOutUser 
 } from './firebase';
-import { doc, setDoc, getDoc, collection, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, onSnapshot, deleteDoc } from 'firebase/firestore';
 
 // Seed initial users
 const DEFAULT_USERS: User[] = [
@@ -1195,57 +1195,7 @@ export default function App() {
 
         setCurrentUser(userProfile);
 
-        // Auto-join default league
-        const groupDocRef = doc(fbInstance.db, 'groups', 'group-1');
-        const groupDoc = await getDoc(groupDocRef);
-        if (groupDoc.exists()) {
-          const groupData = groupDoc.data() as Group;
-          if (!groupData.members[firebaseUser.uid]) {
-            const updatedMembers = {
-              ...groupData.members,
-              [firebaseUser.uid]: {
-                userId: firebaseUser.uid,
-                username: name,
-                balance: groupData.startingBudget || 500,
-                correctCount: 0,
-                totalBetsCount: 0,
-                winRate: 0,
-                noLossUsed: 0,
-                doubleChanceUsed: 0,
-                doublePointsUsed: 0
-              }
-            };
-            await updateDoc(groupDocRef, { members: updatedMembers });
-          }
-        } else {
-          const defaultGroup: Group = {
-            id: 'group-1',
-            name: 'Qatar-2022 Rematch League',
-            inviteCode: 'FIFA26',
-            adminId: firebaseUser.uid,
-            startingBudget: 500,
-            toggle3MatchBonus: true,
-            toggleMdBonus: true,
-            mdBonusPoints: 100,
-            allowCombos: true,
-            allowOverdraft: true,
-            seasonStarted: false,
-            members: {
-              [firebaseUser.uid]: {
-                userId: firebaseUser.uid,
-                username: name,
-                balance: 500,
-                correctCount: 0,
-                totalBetsCount: 0,
-                winRate: 0,
-                noLossUsed: 0,
-                doubleChanceUsed: 0,
-                doublePointsUsed: 0
-              }
-            }
-          };
-          await setDoc(groupDocRef, defaultGroup);
-        }
+        // Auto-join disabled - users must join via code or invite link.
       } else {
         setIsOnlineLoggedIn(false);
         const savedUser = localStorage.getItem('wc_current_user');
@@ -1445,10 +1395,26 @@ export default function App() {
     setPendingInviteCode(null);
   }, [pendingInviteCode, groups, currentUser?.id]);
 
+  // Auto-set active group to one the user is member of
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const userGroups = groups.filter(g => g.members && g.members[currentUser.id]);
+    if (userGroups.length > 0) {
+      if (!userGroups.some(g => g.id === activeGroupId)) {
+        setActiveGroupId(userGroups[0].id);
+      }
+    } else {
+      if (activeGroupId !== '') {
+        setActiveGroupId('');
+      }
+    }
+  }, [groups, currentUser?.id, activeGroupId]);
+
   // --- Derived Values ---
   const activeGroup = useMemo(() => {
-    return groups.find(g => g.id === activeGroupId) || groups[0];
-  }, [groups, activeGroupId]);
+    const userGroups = groups.filter(g => currentUser && g.members && g.members[currentUser.id]);
+    return userGroups.find(g => g.id === activeGroupId) || userGroups[0] || null;
+  }, [groups, activeGroupId, currentUser]);
 
   const activeMemberInfo = useMemo(() => {
     if (!activeGroup) return null;
@@ -3237,6 +3203,176 @@ export default function App() {
     );
   };
 
+  const renderWelcomeScreen = () => {
+    return (
+      <div 
+        style={{
+          width: '100%',
+          maxWidth: '800px',
+          margin: '0 auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '30px',
+          padding: '20px 10px',
+          alignItems: 'stretch'
+        }}
+      >
+        {/* Welcome Header */}
+        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.2) 0%, rgba(0, 199, 82, 0.2) 100%)',
+            border: '1px solid rgba(var(--color-primary-rgb), 0.3)',
+            borderRadius: '50%',
+            width: '70px',
+            height: '70px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 8px 32px rgba(var(--color-primary-rgb), 0.25)',
+            marginBottom: '8px'
+          }}>
+            <Trophy size={36} className="text-gold" style={{ color: 'var(--color-primary)' }} />
+          </div>
+          <h2 style={{ fontSize: '28px', fontWeight: '800', letterSpacing: '-0.5px' }}>
+            FIFA World Cup <span className="text-gold" style={{ color: 'var(--color-primary)' }}>2026</span>
+          </h2>
+          <p style={{ color: 'var(--color-text-secondary)', fontSize: '15px', maxWidth: '500px', lineHeight: '1.5', margin: '0 auto' }}>
+            Welcome to the predictions league! You are currently logged in but not a member of any active leagues. Join a league to start placing your bets or create your own!
+          </p>
+        </div>
+
+        {/* Action Panel Cards Grid */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: layoutMode === 'mobile' ? '1fr' : '1fr 1fr',
+          gap: '24px',
+          marginTop: '10px'
+        }}>
+          {/* Card 1: Join a League */}
+          <div className="glass-panel pulse-gold-border" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', background: 'rgba(20, 20, 26, 0.8)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ background: 'rgba(49, 80, 255, 0.15)', padding: '8px', borderRadius: '8px', color: 'var(--color-primary)' }}>
+                <Users size={20} />
+              </div>
+              <h3 style={{ fontSize: '16px', fontWeight: '700' }}>Join a League</h3>
+            </div>
+            
+            <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: '1.5', flex: 1 }}>
+              If your friends sent you a 6-character invite code, enter it below to join their league immediately.
+            </p>
+
+            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+              <input
+                type="text"
+                placeholder="Enter Code (e.g. FIFA26)"
+                value={inviteInput}
+                onChange={(e) => setInviteInput(e.target.value)}
+                style={{ fontSize: '13px', padding: '10px', flex: 1 }}
+              />
+              <button
+                onClick={handleJoinGroup}
+                className="btn-primary"
+                style={{
+                  padding: '0 16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <span>Join</span>
+                <ArrowRight size={14} />
+              </button>
+            </div>
+          </div>
+
+          {/* Card 2: Create a League */}
+          <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', background: 'rgba(20, 20, 26, 0.8)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ background: 'rgba(0, 199, 82, 0.15)', padding: '8px', borderRadius: '8px', color: 'var(--color-secondary)' }}>
+                <Plus size={20} />
+              </div>
+              <h3 style={{ fontSize: '16px', fontWeight: '700' }}>Create a League</h3>
+            </div>
+
+            <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: '1.5', flex: 1 }}>
+              Create a brand new predictions league! Customize settings like starting budget, overdrafts, and combination bets, then invite your friends.
+            </p>
+
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="btn-secondary"
+              style={{
+                width: '100%',
+                padding: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                borderColor: 'var(--color-secondary)',
+                color: 'var(--color-text-primary)',
+                marginTop: '8px'
+              }}
+            >
+              <span>Create New League</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Current User Session details */}
+        {fbInstance && isOnlineLoggedIn && (
+          <div className="glass-panel" style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.01)', borderStyle: 'dashed' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%)',
+                color: '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: '700',
+                fontSize: '14px'
+              }}>
+                {currentUser.avatarUrl}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ fontSize: '13px', fontWeight: '600' }}>Logged in as: {currentUser.username}</span>
+                <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{currentUser.email}</span>
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                try {
+                  await logOutUser(fbInstance.auth);
+                  alert("Logged out successfully!");
+                } catch (e: any) {
+                  alert("Logout failed: " + e.message);
+                }
+              }}
+              style={{
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+                color: '#ef4444',
+                borderRadius: '8px',
+                padding: '8px 16px',
+                fontSize: '12px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'background 0.2s'
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)' }}
+            >
+              Log Out
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div 
       className={`app-container ${layoutMode === 'mobile' ? 'mobile-mode' : ''}`} 
@@ -3516,51 +3652,53 @@ export default function App() {
         )}
 
         {/* Navigation Tabs (Unified Sidebar Menu) */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
-            Menu Navigation
-          </span>
-          {[
-            { id: 'matches', label: 'Match Center', icon: '🏟️' },
-            { id: 'leaderboard', label: 'Leaderboard', icon: '🏆' },
-            { id: 'standings', label: 'Standings & Bracket', icon: '📊' },
-            { id: 'chat', label: 'Banter Chat', icon: '💬' },
-            { id: 'history', label: 'Betting History', icon: '📜' },
-            { id: 'recap', label: "Yesterday's Recap", icon: '📑' },
-            { id: 'howplay', label: 'How to Play', icon: '❓' },
-            { id: 'settings', label: 'League Settings', icon: '⚙️' }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => {
-                setActiveTab(tab.id);
-                if (layoutMode === 'mobile') {
-                  setShowMobileSidebar(false);
-                }
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                width: '100%',
-                padding: '10px 14px',
-                borderRadius: '8px',
-                background: activeTab === tab.id ? 'rgba(var(--color-primary-rgb), 0.1)' : 'transparent',
-                border: '1px solid',
-                borderColor: activeTab === tab.id ? 'var(--color-primary)' : 'transparent',
-                color: activeTab === tab.id ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
-                fontSize: '13px',
-                fontWeight: activeTab === tab.id ? '700' : '500',
-                cursor: 'pointer',
-                textAlign: 'left',
-                transition: 'all 0.2s'
-              }}
-            >
-              <span style={{ fontSize: '14px' }}>{tab.icon}</span>
-              <span>{tab.label}</span>
-            </button>
-          ))}
-        </div>
+        {activeGroup && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
+              Menu Navigation
+            </span>
+            {[
+              { id: 'matches', label: 'Match Center', icon: '🏟️' },
+              { id: 'leaderboard', label: 'Leaderboard', icon: '🏆' },
+              { id: 'standings', label: 'Standings & Bracket', icon: '📊' },
+              { id: 'chat', label: 'Banter Chat', icon: '💬' },
+              { id: 'history', label: 'Betting History', icon: '📜' },
+              { id: 'recap', label: "Yesterday's Recap", icon: '📑' },
+              { id: 'howplay', label: 'How to Play', icon: '❓' },
+              { id: 'settings', label: 'League Settings', icon: '⚙️' }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  if (layoutMode === 'mobile') {
+                    setShowMobileSidebar(false);
+                  }
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  width: '100%',
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  background: activeTab === tab.id ? 'rgba(var(--color-primary-rgb), 0.1)' : 'transparent',
+                  border: '1px solid',
+                  borderColor: activeTab === tab.id ? 'var(--color-primary)' : 'transparent',
+                  color: activeTab === tab.id ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
+                  fontSize: '13px',
+                  fontWeight: activeTab === tab.id ? '700' : '500',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <span style={{ fontSize: '14px' }}>{tab.icon}</span>
+                <span>{tab.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Groups Selection */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -3578,30 +3716,36 @@ export default function App() {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {groups.map(g => (
-              <div
-                key={g.id}
-                onClick={() => setActiveGroupId(g.id)}
-                style={{
-                  padding: '10px 14px',
-                  borderRadius: '10px',
-                  background: g.id === activeGroupId ? 'rgba(212, 175, 55, 0.08)' : 'transparent',
-                  border: '1px solid',
-                  borderColor: g.id === activeGroupId ? 'var(--color-primary)' : 'transparent',
-                  color: g.id === activeGroupId ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  transition: 'var(--transition-smooth)'
-                }}
-              >
-                <Users size={16} style={{ color: g.id === activeGroupId ? 'var(--color-primary)' : 'var(--color-text-muted)' }} />
-                <span style={{ fontSize: '13px', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                  {g.name}
-                </span>
-              </div>
-            ))}
+            {groups.filter(g => currentUser && g.members && g.members[currentUser.id]).length > 0 ? (
+              groups.filter(g => currentUser && g.members && g.members[currentUser.id]).map(g => (
+                <div
+                  key={g.id}
+                  onClick={() => setActiveGroupId(g.id)}
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    background: g.id === activeGroupId ? 'rgba(212, 175, 55, 0.08)' : 'transparent',
+                    border: '1px solid',
+                    borderColor: g.id === activeGroupId ? 'var(--color-primary)' : 'transparent',
+                    color: g.id === activeGroupId ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    transition: 'var(--transition-smooth)'
+                  }}
+                >
+                  <Users size={16} style={{ color: g.id === activeGroupId ? 'var(--color-primary)' : 'var(--color-text-muted)' }} />
+                  <span style={{ fontSize: '13px', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                    {g.name}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontStyle: 'italic', padding: '4px 14px' }}>
+                No active leagues
+              </span>
+            )}
           </div>
         </div>
 
@@ -3862,7 +4006,17 @@ export default function App() {
 
       {/* --- MAIN PAGE VIEW --- */}
       <main style={
-        layoutMode === 'mobile'
+        !activeGroup
+          ? {
+              padding: layoutMode === 'mobile' ? '16px' : '40px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minHeight: '100vh',
+              overflowY: 'auto',
+              width: '100%'
+            }
+          : layoutMode === 'mobile'
           ? {
               padding: '16px',
               display: 'grid',
@@ -3881,8 +4035,12 @@ export default function App() {
               overflowY: 'auto'
             }
       }>
-        {/* Main Content Area */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        {!activeGroup ? (
+          renderWelcomeScreen()
+        ) : (
+          <>
+            {/* Main Content Area */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           
           {/* Mobile Header Bar */}
           {layoutMode === 'mobile' && (
@@ -6245,11 +6403,11 @@ export default function App() {
 
           </div>
         </div>
-
+        </>
+        )}
       </main>
 
-      {/* Floating Mobile Bet Slip Toggle */}
-      {layoutMode === 'mobile' && !showMobileSlip && (
+      {activeGroup && layoutMode === 'mobile' && !showMobileSlip && (
         <button
           onClick={() => setShowMobileSlip(true)}
           style={{
