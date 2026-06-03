@@ -5275,127 +5275,131 @@ export default function App() {
               )}
 
 
-              {/* Firebase Database Connection Card */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '20px', marginTop: '10px' }}>
-                <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--color-primary)' }}>Firebase Server Settings</h3>
-                <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-                  Provide your Firebase Web Config JSON string below to enable Multiplayer Sync Mode. 
-                  If left empty, the application runs in local-only Sandbox Mode.
-                </p>
-                
-                <textarea
-                  placeholder='{"apiKey": "...", "authDomain": "...", "projectId": "...", ...}'
-                  rows={6}
-                  value={firebaseConfig}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setFirebaseConfig(val);
-                  }}
-                  style={{
-                    width: '100%',
-                    fontFamily: 'monospace',
-                    fontSize: '12px',
-                    padding: '10px',
-                    background: 'rgba(0,0,0,0.4)',
-                    border: '1px solid var(--border-color)',
-                    color: '#fff',
-                    borderRadius: '8px',
-                    resize: 'vertical'
-                  }}
-                />
-                {fbInstance ? (
-                  <span style={{ fontSize: '11px', color: 'var(--color-secondary)', fontWeight: '600' }}>
-                    ✔ Connected to Firebase Online Database
-                  </span>
-                ) : firebaseConfig ? (
-                  <span style={{ fontSize: '11px', color: 'var(--color-danger)', fontWeight: '600' }}>
-                    ✖ Invalid Firebase Config JSON
-                  </span>
-                ) : (
-                  <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
-                    Running in Offline Sandbox Mode (using localStorage)
-                  </span>
-                )}
-              </div>
-
-              {/* Odds Feed Settings Card */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '20px', marginTop: '10px' }}>
-                <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--color-primary)' }}>Odds Feed Settings (Personal)</h3>
-                <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Configure how betting odds are synced daily. These settings are local to your browser.</p>
-                
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: '600' }}>Odds Synchronization Source</label>
-                  <div style={{ display: 'flex', gap: '20px', fontSize: '13px', padding: '6px 0' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                      <input
-                        type="radio"
-                        name="oddsSource"
-                        value="scrape"
-                        checked={oddsSource === 'scrape'}
-                        onChange={() => {
-                          setOddsSource('scrape');
-                          triggerOddsSync(currentDate, 'scrape');
-                        }}
-                      />
-                      Scraped Daily Feed (Offline Fallback)
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                      <input
-                        type="radio"
-                        name="oddsSource"
-                        value="api"
-                        checked={oddsSource === 'api'}
-                        onChange={() => {
-                          setOddsSource('api');
-                          triggerOddsSync(currentDate, 'api');
-                        }}
-                      />
-                      The Odds API (Real Betting Client)
-                    </label>
-                  </div>
-                </div>
-
-                {oddsSource === 'api' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
-                    <label style={{ fontSize: '13px', fontWeight: '600' }}>The Odds API Key</label>
-                    <input
-                      type="password"
-                      placeholder="Paste API Key (from the-odds-api.com)"
-                      value={oddsApiKey}
+              {activeGroup && currentUser?.id === activeGroup.adminId && (
+                <>
+                  {/* Firebase Database Connection Card */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '20px', marginTop: '10px' }}>
+                    <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--color-primary)' }}>Firebase Server Settings</h3>
+                    <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                      Provide your Firebase Web Config JSON string below to enable Multiplayer Sync Mode. 
+                      If left empty, the application runs in local-only Sandbox Mode.
+                    </p>
+                    
+                    <textarea
+                      placeholder='{"apiKey": "...", "authDomain": "...", "projectId": "...", ...}'
+                      rows={6}
+                      value={firebaseConfig}
                       onChange={(e) => {
                         const val = e.target.value;
-                        setOddsApiKey(val);
-                        triggerOddsSync(currentDate, 'api', val);
+                        setFirebaseConfig(val);
                       }}
-                      style={{ maxWidth: '350px', fontSize: '12px', padding: '8px' }}
+                      style={{
+                        width: '100%',
+                        fontFamily: 'monospace',
+                        fontSize: '12px',
+                        padding: '10px',
+                        background: 'rgba(0,0,0,0.4)',
+                        border: '1px solid var(--border-color)',
+                        color: '#fff',
+                        borderRadius: '8px',
+                        resize: 'vertical'
+                      }}
                     />
-                    <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
-                      Your key is saved in local browser storage. Free keys are available by registering at <strong>the-odds-api.com</strong>.
-                    </span>
+                    {fbInstance ? (
+                      <span style={{ fontSize: '11px', color: 'var(--color-secondary)', fontWeight: '600' }}>
+                        ✔ Connected to Firebase Online Database
+                      </span>
+                    ) : firebaseConfig ? (
+                      <span style={{ fontSize: '11px', color: 'var(--color-danger)', fontWeight: '600' }}>
+                        ✖ Invalid Firebase Config JSON
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                        Running in Offline Sandbox Mode (using localStorage)
+                      </span>
+                    )}
                   </div>
-                )}
-              </div>
 
-              {/* Klipy GIF Keyboard Settings Card */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '20px', marginTop: '10px' }}>
-                <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--color-primary)' }}>Klipy GIF Keyboard Settings (Personal)</h3>
-                <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Configure your Klipy GIF search API key. This setting is saved locally in your browser.</p>
-                
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: '600' }}>Klipy API Key</label>
-                  <input
-                    type="password"
-                    placeholder="Paste Klipy API Key (from partner.klipy.com)"
-                    value={klipyApiKey}
-                    onChange={(e) => setKlipyApiKey(e.target.value)}
-                    style={{ maxWidth: '350px', fontSize: '12px', padding: '8px' }}
-                  />
-                  <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
-                    An API Key from your **Klipy Partner Panel** dashboard is required.
-                    If left blank, a fallback demo key is used.
-                  </span>
-                </div>
-              </div>
+                  {/* Odds Feed Settings Card */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '20px', marginTop: '10px' }}>
+                    <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--color-primary)' }}>Odds Feed Settings (Personal)</h3>
+                    <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Configure how betting odds are synced daily. These settings are local to your browser.</p>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ fontSize: '13px', fontWeight: '600' }}>Odds Synchronization Source</label>
+                      <div style={{ display: 'flex', gap: '20px', fontSize: '13px', padding: '6px 0' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                          <input
+                            type="radio"
+                            name="oddsSource"
+                            value="scrape"
+                            checked={oddsSource === 'scrape'}
+                            onChange={() => {
+                              setOddsSource('scrape');
+                              triggerOddsSync(currentDate, 'scrape');
+                            }}
+                          />
+                          Scraped Daily Feed (Offline Fallback)
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                          <input
+                            type="radio"
+                            name="oddsSource"
+                            value="api"
+                            checked={oddsSource === 'api'}
+                            onChange={() => {
+                              setOddsSource('api');
+                              triggerOddsSync(currentDate, 'api');
+                            }}
+                          />
+                          The Odds API (Real Betting Client)
+                        </label>
+                      </div>
+                    </div>
+
+                    {oddsSource === 'api' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
+                        <label style={{ fontSize: '13px', fontWeight: '600' }}>The Odds API Key</label>
+                        <input
+                          type="password"
+                          placeholder="Paste API Key (from the-odds-api.com)"
+                          value={oddsApiKey}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setOddsApiKey(val);
+                            triggerOddsSync(currentDate, 'api', val);
+                          }}
+                          style={{ maxWidth: '350px', fontSize: '12px', padding: '8px' }}
+                        />
+                        <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                          Your key is saved in local browser storage. Free keys are available by registering at <strong>the-odds-api.com</strong>.
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Klipy GIF Keyboard Settings Card */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '20px', marginTop: '10px' }}>
+                    <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--color-primary)' }}>Klipy GIF Keyboard Settings (Personal)</h3>
+                    <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Configure your Klipy GIF search API key. This setting is saved locally in your browser.</p>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ fontSize: '13px', fontWeight: '600' }}>Klipy API Key</label>
+                      <input
+                        type="password"
+                        placeholder="Paste Klipy API Key (from partner.klipy.com)"
+                        value={klipyApiKey}
+                        onChange={(e) => setKlipyApiKey(e.target.value)}
+                        style={{ maxWidth: '350px', fontSize: '12px', padding: '8px' }}
+                      />
+                      <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                        An API Key from your **Klipy Partner Panel** dashboard is required.
+                        If left blank, a fallback demo key is used.
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
