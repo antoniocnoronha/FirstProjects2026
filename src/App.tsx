@@ -9,7 +9,7 @@ import type {
   User, Group, Match, SingleBet, DoubleChanceBet, ComboBet, YesterdayRecap, GroupMember, ChatMessage
 } from './types';
 import { getInitialMatches, GROUPS_TEAMS, getScrapedBaselineOdds } from './matchData';
-import { fetchLiveOddsFromAPI, scrapeDailyOddsFeed } from './oddsService';
+import { fetchLiveOddsFromAPI, scrapeDailyOddsFeed, fetchLiveScoresFromAPI } from './oddsService';
 import {
   getMatchdayMultiplier, resolveSingleBet, resolveDoubleChanceBet,
   resolveComboBet, resolveMatchdayMVP,
@@ -961,6 +961,31 @@ export default function App() {
   }, [layoutMode, showMobileSidebar]);
 
   // --- UI Interactions State ---
+  const [isWebsiteAdmin, setIsWebsiteAdmin] = useState<boolean>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const adminParam = params.get('admin');
+    if (adminParam === 'true' || params.get('admin_key') === 'FIFA26_ADMIN') {
+      localStorage.setItem('wc_website_admin', 'true');
+      return true;
+    } else if (adminParam === 'false') {
+      localStorage.removeItem('wc_website_admin');
+      return false;
+    }
+    return localStorage.getItem('wc_website_admin') === 'true';
+  });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const adminParam = params.get('admin');
+    if (adminParam === 'true' || params.get('admin_key') === 'FIFA26_ADMIN') {
+      localStorage.setItem('wc_website_admin', 'true');
+      setIsWebsiteAdmin(true);
+    } else if (adminParam === 'false') {
+      localStorage.removeItem('wc_website_admin');
+      setIsWebsiteAdmin(false);
+    }
+  }, []);
+
   const [inviteInput, setInviteInput] = useState<string>('');
   const [pendingInviteCode, setPendingInviteCode] = useState<string | null>(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1297,13 +1322,28 @@ export default function App() {
     };
   }, [fbInstance]);
 
-  // Auto-sync real-life results from results.json when simulated time passes kickoff
+  // Auto-sync real-life results from The Odds API and results.json when simulated time passes kickoff
   useEffect(() => {
     const syncResultsOnTimeChange = async () => {
       try {
-        const res = await fetch('/results.json');
-        if (!res.ok) return;
-        const realScores = await res.json();
+        let apiScores: Record<string, { homeScore: number; awayScore: number; completed: boolean }> = {};
+        if (oddsSource === 'api' && oddsApiKey.trim()) {
+          try {
+            apiScores = await fetchLiveScoresFromAPI(oddsApiKey.trim());
+          } catch (err) {
+            console.warn("Could not fetch completed scores from The Odds API:", err);
+          }
+        }
+
+        let realScores: Record<string, { homeScore: number; awayScore: number; winner?: string | null }> = {};
+        try {
+          const res = await fetch('/results.json');
+          if (res.ok) {
+            realScores = await res.json();
+          }
+        } catch (e) {
+          console.warn("Could not fetch results.json:", e);
+        }
         
         const [year, month, day] = currentDate.split('-').map(Number);
         const [hour, minute] = currentTime.split(':').map(Number);
@@ -1311,36 +1351,56 @@ export default function App() {
 
         let changed = false;
         const updated = matches.map(m => {
+          const lookupKey = `${m.homeTeam}-${m.awayTeam}`;
+          const lookupKeyAlt = `${m.awayTeam}-${m.homeTeam}`;
+          const apiScore = apiScores[lookupKey] || apiScores[lookupKeyAlt];
           const score = realScores[m.id];
-          if (score !== undefined && score !== null && score.homeScore !== undefined && m.status === 'scheduled') {
+
+          if (m.status === 'scheduled') {
             const [mYear, mMonth, mDay] = m.date.split('-').map(Number);
             const [mHour, mMinute] = m.kickoffTime.split(':').map(Number);
             const matchDateTime = new Date(mYear, mMonth - 1, mDay, mHour, mMinute);
 
             // ONLY resolve if the match kickoff time is in the past or equal in the simulation
             if (matchDateTime <= currentSimDateTime) {
-              const homeScore = score.homeScore;
-              const awayScore = score.awayScore;
-              let result: '1' | 'X' | '2';
-              if (homeScore > awayScore) result = '1';
-              else if (homeScore === awayScore) result = 'X';
-              else result = '2';
+              let homeScore = 0;
+              let awayScore = 0;
+              let winner: string | null = null;
+              let result: '1' | 'X' | '2' = 'X';
+              let resolved = false;
 
-              let winner = score.winner || null;
-              if (m.matchday >= 4 && !winner) {
-                if (homeScore > awayScore) winner = m.homeTeam;
-                else if (awayScore > homeScore) winner = m.awayTeam;
+              if (apiScore && apiScore.completed) {
+                homeScore = apiScore.homeScore;
+                awayScore = apiScore.awayScore;
+                if (homeScore > awayScore) result = '1';
+                else if (homeScore === awayScore) result = 'X';
+                else result = '2';
+                resolved = true;
+              } else if (score !== undefined && score !== null && score.homeScore !== undefined) {
+                homeScore = score.homeScore;
+                awayScore = score.awayScore;
+                winner = score.winner || null;
+                if (homeScore > awayScore) result = '1';
+                else if (homeScore === awayScore) result = 'X';
+                else result = '2';
+                resolved = true;
               }
 
-              changed = true;
-              return {
-                ...m,
-                status: 'finished' as const,
-                homeScore,
-                awayScore,
-                result,
-                winner
-              };
+              if (resolved) {
+                if (m.matchday >= 4 && !winner) {
+                  if (homeScore > awayScore) winner = m.homeTeam;
+                  else if (awayScore > homeScore) winner = m.awayTeam;
+                }
+                changed = true;
+                return {
+                  ...m,
+                  status: 'finished' as const,
+                  homeScore,
+                  awayScore,
+                  result,
+                  winner
+                };
+              }
             }
           }
           return m;
@@ -1349,7 +1409,7 @@ export default function App() {
         if (changed) {
           const progressed = progressKnockoutRounds(updated);
           setMatches(progressed);
-          console.log("Synced real-life match results from results.json for elapsed matches.");
+          console.log("Synced real-life match results for elapsed matches.");
         }
       } catch (err) {
         console.warn("Could not sync real-life results:", err);
@@ -2191,6 +2251,16 @@ export default function App() {
     const currentDCs = [...doubleChanceBets, ...friendDCBetsToAdd];
     const currentCombos = [...comboBets, ...friendCombosToAdd];
 
+    // Try fetching real-life scores from The Odds API first, if API key is present
+    let apiScores: Record<string, { homeScore: number; awayScore: number; completed: boolean }> = {};
+    if (oddsSource === 'api' && oddsApiKey.trim()) {
+      try {
+        apiScores = await fetchLiveScoresFromAPI(oddsApiKey.trim());
+      } catch (err) {
+        console.warn("Could not fetch completed scores from The Odds API:", err);
+      }
+    }
+
     // Try fetching real-life scores from results.json
     let realScores: Record<string, { homeScore: number; awayScore: number; winner?: string | null }> = {};
     try {
@@ -2210,13 +2280,25 @@ export default function App() {
       const isSessionMatch = matchDateTime >= bounds.start && matchDateTime < bounds.end;
 
       if (isSessionMatch && m.status === 'scheduled') {
+        const lookupKey = `${m.homeTeam}-${m.awayTeam}`;
+        const lookupKeyAlt = `${m.awayTeam}-${m.homeTeam}`;
+        const apiScore = apiScores[lookupKey] || apiScores[lookupKeyAlt];
         const realScore = realScores[m.id];
+        
         let homeScore = 0;
         let awayScore = 0;
         let winner: string | null = null;
         let result: '1' | 'X' | '2' = 'X';
+        let resolvedFromSource = false;
 
-        if (realScore !== undefined && realScore !== null && realScore.homeScore !== undefined) {
+        if (apiScore && apiScore.completed) {
+          homeScore = apiScore.homeScore;
+          awayScore = apiScore.awayScore;
+          if (homeScore > awayScore) result = '1';
+          else if (homeScore === awayScore) result = 'X';
+          else result = '2';
+          resolvedFromSource = true;
+        } else if (realScore !== undefined && realScore !== null && realScore.homeScore !== undefined) {
           // Use real-life score from results.json
           homeScore = realScore.homeScore;
           awayScore = realScore.awayScore;
@@ -2224,7 +2306,10 @@ export default function App() {
           if (homeScore > awayScore) result = '1';
           else if (homeScore === awayScore) result = 'X';
           else result = '2';
+          resolvedFromSource = true;
+        }
 
+        if (resolvedFromSource) {
           if (m.matchday >= 4 && !winner) {
             if (homeScore > awayScore) winner = m.homeTeam;
             else if (awayScore > homeScore) winner = m.awayTeam;
@@ -3988,23 +4073,27 @@ export default function App() {
         </div>
 
         {/* Clean Storage Helper */}
-        <button
-          onClick={handleResetData}
-          style={{
-            background: 'none',
-            color: 'rgba(255,74,90,0.5)',
-            fontSize: '11px',
-            textAlign: 'left',
-            padding: '4px 0',
-            borderTop: '1px solid rgba(255,255,255,0.05)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-            marginTop: '8px'
-          }}
-        >
-          <Trash2 size={12} /> Reset Database
-        </button>
+        {isWebsiteAdmin && (
+          <button
+            onClick={handleResetData}
+            style={{
+              background: 'none',
+              color: 'rgba(255,74,90,0.5)',
+              fontSize: '11px',
+              textAlign: 'left',
+              padding: '4px 0',
+              borderTop: '1px solid rgba(255,255,255,0.05)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              marginTop: '8px',
+              width: '100%',
+              cursor: 'pointer'
+            }}
+          >
+            <Trash2 size={12} /> Reset Database
+          </button>
+        )}
       </aside>
 
       {/* --- MAIN PAGE VIEW --- */}
@@ -4161,7 +4250,7 @@ export default function App() {
           )}
           
           {/* TOURNAMENT SIMULATION DASHBOARD PANEL (ADMIN CONTROL) */}
-          {activeGroup && currentUser?.id === activeGroup.adminId && (
+          {isWebsiteAdmin && activeGroup && (
             <section className="glass-panel pulse-gold-border" style={{
               background: 'linear-gradient(135deg, rgba(18, 30, 24, 0.9) 0%, rgba(10, 15, 13, 0.9) 100%)',
               borderWidth: '1px',
@@ -5438,7 +5527,7 @@ export default function App() {
               )}
 
 
-              {activeGroup && currentUser?.id === activeGroup.adminId && (
+              {isWebsiteAdmin && (
                 <>
                   {/* Firebase Database Connection Card */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '20px', marginTop: '10px' }}>

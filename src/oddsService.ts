@@ -117,3 +117,41 @@ export async function scrapeDailyOddsFeed(
 
   return scrapedMap;
 }
+
+/**
+ * Connects to The Odds API to fetch completed match scores.
+ * Maps completed matches to score records.
+ */
+export async function fetchLiveScoresFromAPI(apiKey: string): Promise<Record<string, { homeScore: number; awayScore: number; completed: boolean }>> {
+  const sportKey = 'soccer_fifa_world_cup';
+  const url = `https://api.the-odds-api.com/v4/sports/${sportKey}/scores/?apiKey=${apiKey}&daysFrom=3`;
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Scores API Sync failed. HTTP ${response.status}`);
+  }
+
+  const data = await response.json();
+  const scoresMap: Record<string, { homeScore: number; awayScore: number; completed: boolean }> = {};
+
+  if (!Array.isArray(data)) return scoresMap;
+
+  data.forEach((event: any) => {
+    if (!event.completed || !Array.isArray(event.scores)) return;
+
+    const homeTeam = normalizeTeamName(event.home_team);
+    const awayTeam = normalizeTeamName(event.away_team);
+
+    const homeScoreObj = event.scores.find((s: any) => normalizeTeamName(s.name) === homeTeam);
+    const awayScoreObj = event.scores.find((s: any) => normalizeTeamName(s.name) === awayTeam);
+
+    if (homeScoreObj && awayScoreObj) {
+      const homeScore = Number(homeScoreObj.score);
+      const awayScore = Number(awayScoreObj.score);
+      const lookupKey = `${homeTeam}-${awayTeam}`;
+      scoresMap[lookupKey] = { homeScore, awayScore, completed: true };
+    }
+  });
+
+  return scoresMap;
+}
