@@ -145,38 +145,11 @@ export function getMatchDateTime(match: Match): Date {
 }
 
 export function isWinnerPredictionWindowOpen(currentMatches: Match[], currentSimDateTime: Date): boolean {
-  // 1. Before the first match starts
-  const firstMatch = currentMatches.find(m => m.id === 'm-1') || currentMatches[0];
-  if (!firstMatch) return true;
-  const firstMatchKickoff = getMatchDateTime(firstMatch);
-  if (currentSimDateTime < firstMatchKickoff) {
-    return true;
-  }
-
-  // 2. Check if we are between stages
-  // Stages:
-  // - Stage 3 (Group stage: matchdays 1, 2, 3)
-  // - Stage 4 (Round of 32)
-  // - Stage 5 (Round of 16)
-  // - Stage 6 (Quarterfinals)
-  // - Stage 7 (Semifinals)
-  const stages = [3, 4, 5, 6, 7];
-  for (const stage of stages) {
-    const stageMatches = currentMatches.filter(m => stage === 3 ? m.matchday <= 3 : m.matchday === stage);
-    const allStageFinished = stageMatches.length > 0 && stageMatches.every(m => m.status === 'finished');
-    if (allStageFinished) {
-      const nextStageMatches = currentMatches.filter(m => m.matchday === stage + 1);
-      if (nextStageMatches.length > 0) {
-        const nextStageStartTimes = nextStageMatches.map(m => getMatchDateTime(m).getTime());
-        const earliestNextStageStart = Math.min(...nextStageStartTimes);
-        if (currentSimDateTime.getTime() < earliestNextStageStart) {
-          return true; // We are after stage, and before stage + 1 starts!
-        }
-      }
-    }
-  }
-
-  return false;
+  const r32Matches = currentMatches.filter(m => m.matchday === 4);
+  const r32KickoffTime = r32Matches.length > 0 
+    ? new Date(Math.min(...r32Matches.map(m => getMatchDateTime(m).getTime())))
+    : new Date(2026, 5, 28, 20, 0);
+  return currentSimDateTime < r32KickoffTime;
 }
 
 const SPONSORS = [
@@ -7488,38 +7461,63 @@ export function WinnerPredictionWidget({
   const currentSimDateTime = new Date(cy, cm - 1, cd, ch, cmin);
   const beforeFirstKickoff = currentSimDateTime < firstMatchKickoff;
 
-  const windowOpen = isWinnerPredictionWindowOpen(matches, currentSimDateTime);
+  const r32Matches = matches.filter(m => m.matchday === 4);
+  const r32KickoffTime = r32Matches.length > 0 
+    ? new Date(Math.min(...r32Matches.map(m => getMatchDateTime(m).getTime())))
+    : new Date(2026, 5, 28, 20, 0);
+  const beforeR32Start = currentSimDateTime < r32KickoffTime;
+
+  const groupMatches = matches.filter(m => m.matchday <= 3);
+  const allGroupFinished = groupMatches.every(m => m.status === 'finished');
+  const inKoBeginWindow = allGroupFinished && beforeR32Start;
 
   const userPrediction = activeMemberInfo?.winnerPrediction;
   const predictionCount = activeMemberInfo?.winnerPredictionCount || 1;
   const isEliminated = userPrediction ? isTeamEliminated(userPrediction, matches) : false;
 
-  const canChangePrediction = windowOpen && (beforeFirstKickoff || !userPrediction || isEliminated);
-  const requiresAd = !beforeFirstKickoff && windowOpen && isEliminated && !!userPrediction;
+  const canChangePrediction = beforeR32Start && (
+    beforeFirstKickoff || 
+    !userPrediction || 
+    (inKoBeginWindow && isEliminated && predictionCount === 1)
+  );
+  const requiresAd = !beforeFirstKickoff && inKoBeginWindow && isEliminated && !!userPrediction;
 
   const availableTeams = useMemo(() => {
     if (beforeFirstKickoff) {
       return allTeams;
     }
-    // After group stage, only allow non-eliminated teams
+    // Only allow non-eliminated teams
     return allTeams.filter(t => !isTeamEliminated(t, matches));
   }, [matches, beforeFirstKickoff, allTeams]);
 
   const handlePredictWinner = async (team: string) => {
     if (!activeGroup || !activeMemberInfo || !dbWriteGroup) return;
 
-    if (!windowOpen) {
-      alert("Winner predictions are locked during the stages! They only reopen between stages.");
+    if (!beforeR32Start) {
+      alert("Winner predictions are permanently locked after the Round of 32 starts!");
       return;
     }
 
-    if (!beforeFirstKickoff && userPrediction && !isEliminated) {
-      alert("You can only change your prediction if your predicted team has been eliminated!");
+    if (userPrediction && !beforeFirstKickoff && !inKoBeginWindow) {
+      alert("Winner predictions are locked during the Group Stage! You can only change your prediction once when the KO stage begins.");
       return;
+    }
+
+    if (userPrediction && inKoBeginWindow) {
+      if (!isEliminated) {
+        alert("You can only change your prediction if your predicted team has been eliminated!");
+        return;
+      }
+      if (predictionCount > 1) {
+        alert("You have already changed your prediction once! You cannot change it again.");
+        return;
+      }
     }
 
     const currentCount = activeMemberInfo.winnerPredictionCount || 1;
-    const newCount = activeMemberInfo.winnerPrediction ? currentCount + 1 : 1;
+    const newCount = beforeFirstKickoff 
+      ? 1 
+      : (activeMemberInfo.winnerPrediction ? currentCount + 1 : 1);
 
     const performSave = async () => {
       const updatedGroup = {
@@ -7565,9 +7563,13 @@ export function WinnerPredictionWidget({
           <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', margin: 0 }}>
             {beforeFirstKickoff 
               ? "Free to bet! Predict the World Cup winner before kickoff. Correct guess pays 100% of starting budget credits!" 
-              : !windowOpen
-                ? "Locked during the stages. Re-opens between stages (after group stage and after each knockout stage) if your team is eliminated."
-                : "Watch a 1-minute video ad to change your prediction. Correct guess pays 50% of starting budget credits."
+              : !beforeR32Start
+                ? "Permanently locked. The Round of 32 has started."
+                : !allGroupFinished
+                  ? "Locked during the Group Stage. Re-opens once when the KO stage begins if your team is eliminated."
+                  : predictionCount > 1
+                    ? "Locked. You have already changed your prediction once."
+                    : "Watch a 1-minute video ad to change your prediction once. Correct guess pays 50% of starting budget credits."
             }
           </p>
         </div>
