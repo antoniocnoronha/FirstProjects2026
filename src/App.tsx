@@ -3390,8 +3390,8 @@ export default function App() {
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <Shield size={12} style={{ color: 'var(--color-info)' }} /> No Loss (Insurance)
                 </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontWeight: '600' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                  <span style={{ fontWeight: '600', whiteSpace: 'nowrap' }}>
                     {2 + (activeMemberInfo.extraNoLossEarned ? 1 : 0) - activeMemberInfo.noLossUsed}/{2 + (activeMemberInfo.extraNoLossEarned ? 1 : 0)} left
                   </span>
                   {!activeMemberInfo.extraNoLossEarned && (
@@ -3406,7 +3406,8 @@ export default function App() {
                         color: 'var(--color-info)',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '2px'
+                        gap: '2px',
+                        whiteSpace: 'nowrap'
                       }}
                       title="Watch 1 min ad to earn +1 No Loss charge"
                     >
@@ -3421,8 +3422,8 @@ export default function App() {
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <Users size={12} style={{ color: 'var(--color-secondary)' }} /> Double Chance
                 </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontWeight: '600' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                  <span style={{ fontWeight: '600', whiteSpace: 'nowrap' }}>
                     {2 + (activeMemberInfo.extraDoubleChanceEarned ? 1 : 0) - activeMemberInfo.doubleChanceUsed}/{2 + (activeMemberInfo.extraDoubleChanceEarned ? 1 : 0)} left
                   </span>
                   {!activeMemberInfo.extraDoubleChanceEarned && (
@@ -3437,7 +3438,8 @@ export default function App() {
                         color: 'var(--color-secondary)',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '2px'
+                        gap: '2px',
+                        whiteSpace: 'nowrap'
                       }}
                       title="Watch 1 min ad to earn +1 Double Chance charge"
                     >
@@ -3452,8 +3454,8 @@ export default function App() {
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <Zap size={12} style={{ color: 'var(--color-warning)' }} /> Double Returns (2x)
                 </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontWeight: '600' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                  <span style={{ fontWeight: '600', whiteSpace: 'nowrap' }}>
                     {2 + (activeMemberInfo.extraDoublePointsEarned ? 1 : 0) - activeMemberInfo.doublePointsUsed}/{2 + (activeMemberInfo.extraDoublePointsEarned ? 1 : 0)} left
                   </span>
                   {!activeMemberInfo.extraDoublePointsEarned && (
@@ -3468,7 +3470,8 @@ export default function App() {
                         color: 'var(--color-warning)',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '2px'
+                        gap: '2px',
+                        whiteSpace: 'nowrap'
                       }}
                       title="Watch 1 min ad to earn +1 Double Returns charge"
                     >
