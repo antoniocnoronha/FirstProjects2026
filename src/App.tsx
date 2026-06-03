@@ -1680,8 +1680,16 @@ export default function App() {
   };
 
   useEffect(() => {
-    triggerOddsSync(currentDate);
-  }, []);
+    // Only trigger API sync if the current user is the administrator of the league,
+    // or if they are playing in the offline sandbox mode. This prevents normal league members
+    // from wasting your API key quota when they open the website.
+    const isOffline = !localStorage.getItem('wc_firebase_config');
+    const isAdmin = activeGroup ? activeGroup.adminId === currentUser?.id : true;
+    
+    if (isOffline || isAdmin) {
+      triggerOddsSync(currentDate);
+    }
+  }, [activeGroup?.id, currentUser?.id]);
 
   // --- Bet Placement logic ---
   const handlePlaceSingleBet = async () => {
