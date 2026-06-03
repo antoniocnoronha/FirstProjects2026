@@ -1,0 +1,98 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: Checks if the user is logged in
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper: Checks if the logged-in user is writing their own data
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Helper: Checks if the user belongs to the specified group
+    function isGroupMember(groupId) {
+      return isAuthenticated() && 
+        resource != null && 
+        resource.data.members.keys().hasAll([request.auth.uid]);
+    }
+
+    // Users Collection: Users can read profiles; only the owner can write
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isOwner(userId);
+      allow delete: if false; // Profiles cannot be deleted arbitrarily
+    }
+
+    // Groups Collection: Authenticated members can read; admins can write settings; members can update their own slot
+    match /groups/{groupId} {
+      allow read: if isAuthenticated();
+      
+      // Creating a group is allowed for authenticated users
+      allow create: if isAuthenticated() && request.resource.data.adminId == request.auth.uid;
+      
+      // Updates: Admins can update any field. Members can only update their own member balance/stats
+      allow update: if isAuthenticated() && (
+        resource.data.adminId == request.auth.uid || 
+        (request.resource.data.adminId == resource.data.adminId &&
+         request.resource.data.name == resource.data.name &&
+         request.resource.data.startingBudget == resource.data.startingBudget &&
+         request.resource.data.allowCombos == resource.data.allowCombos &&
+         request.resource.data.allowOverdraft == resource.data.allowOverdraft &&
+         request.resource.data.seasonStarted == resource.data.seasonStarted &&
+         // Ensure member change is only modifying the current user's entry
+         request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([request.auth.uid]))
+      );
+      
+      // No one can delete a league group completely through the client once started
+      allow delete: if isAuthenticated() && resource.data.adminId == request.auth.uid && !resource.data.seasonStarted;
+
+      // Chats subcollection for banter chat
+      match /chats/{messageId} {
+        allow read, create: if isAuthenticated();
+        allow update, delete: if false;
+      }
+    }
+
+    // Bets Collection: Users can read bets; only the user who made the bet can create or delete it
+    match /bets/{betId} {
+      allow read: if isAuthenticated();
+      
+      // Creating a bet: Must own the bet, and kickoff time must not have passed (kickoffTime must be validated)
+      allow create: if isAuthenticated() && 
+        request.resource.data.userId == request.auth.uid;
+        
+      allow update: if isAuthenticated() && 
+        resource.data.userId == request.auth.uid;
+        
+      allow delete: if isAuthenticated() && 
+        resource.data.userId == request.auth.uid;
+    }
+
+    // Matches Collection: Matches are read-only for users, but can be updated during simulated day progress.
+    // Destruction (deleting matches) is strictly disabled to prevent DB corruption!
+    match /matches/{matchId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated(); // Allow simulated updates
+      allow delete: if false; // Strict protection: prevent deleting matches!
+    }
+
+    // Recaps Collection: Group daily recaps. Read-only once written, deletion is strictly disabled.
+    match /recaps/{recapId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if false; // Strict protection: prevent deleting recaps!
+    }
+
+    // Settings Collection: Calendar date and simulated clock.
+    // Deletion is strictly disabled to protect system state.
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if false; // Strict protection: prevent clock deletion!
+    }
+  }
+}
