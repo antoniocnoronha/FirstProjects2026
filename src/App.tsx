@@ -615,7 +615,7 @@ export default function App() {
 
   // --- Firebase State & Online Database Sync ---
   const [firebaseConfig, setFirebaseConfig] = useState<string>(() => {
-    return localStorage.getItem('wc_firebase_config') || '';
+    return localStorage.getItem('wc_firebase_config') || import.meta.env.VITE_FIREBASE_CONFIG || '';
   });
 
   const fbInstance = useMemo(() => {
@@ -998,10 +998,10 @@ export default function App() {
 
   // --- Odds Sync API Configuration States ---
   const [oddsApiKey, setOddsApiKey] = useState<string>(() => {
-    return localStorage.getItem('wc_odds_api_key') || '9d82a6aa7cdf7acda17da7fee79266eb';
+    return localStorage.getItem('wc_odds_api_key') || import.meta.env.VITE_ODDS_API_KEY || '9d82a6aa7cdf7acda17da7fee79266eb';
   });
   const [klipyApiKey, setKlipyApiKey] = useState<string>(() => {
-    return localStorage.getItem('wc_klipy_api_key') || '';
+    return localStorage.getItem('wc_klipy_api_key') || import.meta.env.VITE_KLIPY_API_KEY || '';
   });
   const [oddsSource, setOddsSource] = useState<'api' | 'scrape'>(() => {
     return (localStorage.getItem('wc_odds_source') as 'api' | 'scrape') || 'api';
@@ -4000,15 +4000,16 @@ export default function App() {
           )}
           
           {/* TOURNAMENT SIMULATION DASHBOARD PANEL (ADMIN CONTROL) */}
-          <section className="glass-panel pulse-gold-border" style={{
-            background: 'linear-gradient(135deg, rgba(18, 30, 24, 0.9) 0%, rgba(10, 15, 13, 0.9) 100%)',
-            borderWidth: '1px',
-            borderColor: 'var(--color-primary)',
-            padding: '20px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px'
-          }}>
+          {activeGroup && currentUser?.id === activeGroup.adminId && (
+            <section className="glass-panel pulse-gold-border" style={{
+              background: 'linear-gradient(135deg, rgba(18, 30, 24, 0.9) 0%, rgba(10, 15, 13, 0.9) 100%)',
+              borderWidth: '1px',
+              borderColor: 'var(--color-primary)',
+              padding: '20px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <Sparkles style={{ color: 'var(--color-primary)' }} />
@@ -4124,6 +4125,7 @@ export default function App() {
               </button>
             </div>
           </section>
+          )}
 
           {layoutMode === 'mobile' && renderMeSectionCard()}
 
