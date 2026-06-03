@@ -9,7 +9,7 @@ import {
 } from 'firebase/auth';
 import type { Auth } from 'firebase/auth';
 import { 
-  getFirestore, 
+  initializeFirestore, 
   Firestore
 } from 'firebase/firestore';
 
@@ -37,7 +37,9 @@ export function getFirebaseInstance(configJsonStr: string): FirebaseInstance | n
     }
     
     const auth = getAuth(app);
-    const db = getFirestore(app);
+    const db = initializeFirestore(app, {
+      ignoreUndefinedProperties: true
+    });
     const googleProvider = new GoogleAuthProvider();
     
     return { app, auth, db, googleProvider };

@@ -661,6 +661,21 @@ export default function App() {
   };
 
   const dbWriteGroup = async (group: Group) => {
+    const cleanObject = (obj: any): any => {
+      if (obj === null || obj === undefined) return obj;
+      if (typeof obj !== 'object') return obj;
+      if (Array.isArray(obj)) return obj.map(cleanObject);
+      
+      const clean: any = {};
+      Object.keys(obj).forEach(key => {
+        if (obj[key] !== undefined) {
+          clean[key] = cleanObject(obj[key]);
+        }
+      });
+      return clean;
+    };
+    const cleanedGroup = cleanObject(group);
+
     if (fbInstance) {
       if (!fbInstance.auth.currentUser) {
         alert("Authentication Error: You must be logged in to edit group settings.");
@@ -668,42 +683,42 @@ export default function App() {
       }
       const currentUid = fbInstance.auth.currentUser.uid;
       // Security Check: Only allow league admin to modify settings, unless it's only updating the current user's member slot.
-      const existingGroup = groups.find(g => g.id === group.id);
+      const existingGroup = groups.find(g => g.id === cleanedGroup.id);
       const isOnlyUpdatingOwnMember = 
         existingGroup &&
-        group.id === existingGroup.id &&
-        group.adminId === existingGroup.adminId &&
-        group.name === existingGroup.name &&
-        group.startingBudget === existingGroup.startingBudget &&
-        (group.allowCombos ?? true) === (existingGroup.allowCombos ?? true) &&
-        (group.allowOverdraft ?? true) === (existingGroup.allowOverdraft ?? true) &&
-        (group.seasonStarted ?? false) === (existingGroup.seasonStarted ?? false) &&
-        (group.toggle3MatchBonus ?? true) === (existingGroup.toggle3MatchBonus ?? true) &&
-        (group.toggleMdBonus ?? true) === (existingGroup.toggleMdBonus ?? true) &&
-        (group.mdBonusPoints ?? 100) === (existingGroup.mdBonusPoints ?? 100) &&
+        cleanedGroup.id === existingGroup.id &&
+        cleanedGroup.adminId === existingGroup.adminId &&
+        cleanedGroup.name === existingGroup.name &&
+        cleanedGroup.startingBudget === existingGroup.startingBudget &&
+        (cleanedGroup.allowCombos ?? true) === (existingGroup.allowCombos ?? true) &&
+        (cleanedGroup.allowOverdraft ?? true) === (existingGroup.allowOverdraft ?? true) &&
+        (cleanedGroup.seasonStarted ?? false) === (existingGroup.seasonStarted ?? false) &&
+        (cleanedGroup.toggle3MatchBonus ?? true) === (existingGroup.toggle3MatchBonus ?? true) &&
+        (cleanedGroup.toggleMdBonus ?? true) === (existingGroup.toggleMdBonus ?? true) &&
+        (cleanedGroup.mdBonusPoints ?? 100) === (existingGroup.mdBonusPoints ?? 100) &&
         Object.keys(existingGroup.members).every(uid => {
           if (uid === currentUid) return true;
-          return JSON.stringify(group.members[uid]) === JSON.stringify(existingGroup.members[uid]);
+          return JSON.stringify(cleanedGroup.members[uid]) === JSON.stringify(existingGroup.members[uid]);
         }) &&
-        Object.keys(group.members).every(uid => {
+        Object.keys(cleanedGroup.members).every(uid => {
           if (uid === currentUid) return true;
           return existingGroup.members[uid] !== undefined;
         });
 
-      if (!isOnlyUpdatingOwnMember && group.adminId !== currentUid) {
+      if (!isOnlyUpdatingOwnMember && cleanedGroup.adminId !== currentUid) {
         alert("Security Error: Only the group administrator can modify these league settings.");
         return;
       }
-      await setDoc(doc(fbInstance.db, 'groups', group.id), group);
+      await setDoc(doc(fbInstance.db, 'groups', cleanedGroup.id), cleanedGroup);
     } else {
       setGroups(prev => {
-        const idx = prev.findIndex(g => g.id === group.id);
+        const idx = prev.findIndex(g => g.id === cleanedGroup.id);
         if (idx !== -1) {
           const updated = [...prev];
-          updated[idx] = group;
+          updated[idx] = cleanedGroup;
           return updated;
         }
-        return [...prev, group];
+        return [...prev, cleanedGroup];
       });
     }
   };
