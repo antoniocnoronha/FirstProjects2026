@@ -138,6 +138,47 @@ export function isTeamEliminated(teamName: string, currentMatches: Match[]): boo
   return false;
 }
 
+export function getMatchDateTime(match: Match): Date {
+  const [year, month, day] = match.date.split('-').map(Number);
+  const [hour, minute] = match.kickoffTime.split(':').map(Number);
+  return new Date(year, month - 1, day, hour, minute);
+}
+
+export function isWinnerPredictionWindowOpen(currentMatches: Match[], currentSimDateTime: Date): boolean {
+  // 1. Before the first match starts
+  const firstMatch = currentMatches.find(m => m.id === 'm-1') || currentMatches[0];
+  if (!firstMatch) return true;
+  const firstMatchKickoff = getMatchDateTime(firstMatch);
+  if (currentSimDateTime < firstMatchKickoff) {
+    return true;
+  }
+
+  // 2. Check if we are between stages
+  // Stages:
+  // - Stage 3 (Group stage: matchdays 1, 2, 3)
+  // - Stage 4 (Round of 32)
+  // - Stage 5 (Round of 16)
+  // - Stage 6 (Quarterfinals)
+  // - Stage 7 (Semifinals)
+  const stages = [3, 4, 5, 6, 7];
+  for (const stage of stages) {
+    const stageMatches = currentMatches.filter(m => stage === 3 ? m.matchday <= 3 : m.matchday === stage);
+    const allStageFinished = stageMatches.length > 0 && stageMatches.every(m => m.status === 'finished');
+    if (allStageFinished) {
+      const nextStageMatches = currentMatches.filter(m => m.matchday === stage + 1);
+      if (nextStageMatches.length > 0) {
+        const nextStageStartTimes = nextStageMatches.map(m => getMatchDateTime(m).getTime());
+        const earliestNextStageStart = Math.min(...nextStageStartTimes);
+        if (currentSimDateTime.getTime() < earliestNextStageStart) {
+          return true; // We are after stage, and before stage + 1 starts!
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
 const SPONSORS = [
   {
     name: 'Qatar Airways',
@@ -661,9 +702,12 @@ export default function App() {
         group.adminId === existingGroup.adminId &&
         group.name === existingGroup.name &&
         group.startingBudget === existingGroup.startingBudget &&
-        group.allowCombos === existingGroup.allowCombos &&
-        group.allowOverdraft === existingGroup.allowOverdraft &&
-        group.seasonStarted === existingGroup.seasonStarted &&
+        (group.allowCombos ?? true) === (existingGroup.allowCombos ?? true) &&
+        (group.allowOverdraft ?? true) === (existingGroup.allowOverdraft ?? true) &&
+        (group.seasonStarted ?? false) === (existingGroup.seasonStarted ?? false) &&
+        (group.toggle3MatchBonus ?? true) === (existingGroup.toggle3MatchBonus ?? true) &&
+        (group.toggleMdBonus ?? true) === (existingGroup.toggleMdBonus ?? true) &&
+        (group.mdBonusPoints ?? 100) === (existingGroup.mdBonusPoints ?? 100) &&
         Object.keys(existingGroup.members).every(uid => {
           if (uid === currentUid) return true;
           return JSON.stringify(group.members[uid]) === JSON.stringify(existingGroup.members[uid]);
@@ -2602,7 +2646,7 @@ export default function App() {
           const mbr = activeGp.members[uid];
           if (mbr && mbr.winnerPrediction && mbr.winnerPrediction.trim().toLowerCase() === tournamentWinner.trim().toLowerCase()) {
             const predictionCount = mbr.winnerPredictionCount || 1;
-            const factor = Math.pow(0.5, predictionCount - 1);
+            const factor = predictionCount > 1 ? 0.5 : 1.0;
             const payout = Math.round(activeGp.startingBudget * factor);
             mbr.balance += payout;
             await writeChatMessage(`🏆 TOURNAMENT WINNER REVEALED: ${mbr.username} predicted ${tournamentWinner} correctly! Gained +${payout} credits (Prediction #${predictionCount})! 🥳`, 'activity', undefined, uid, mbr.username);
@@ -7437,21 +7481,21 @@ export function WinnerPredictionWidget({
     return Object.values(GROUPS_TEAMS).flat().sort();
   }, []);
 
-  const firstMatchKickoff = new Date(2026, 5, 11, 13, 0); // 2026-06-11 13:00
+  const firstMatch = matches.find(m => m.id === 'm-1') || matches[0];
+  const firstMatchKickoff = firstMatch ? getMatchDateTime(firstMatch) : new Date(2026, 5, 11, 20, 0);
   const [cy, cm, cd] = currentDate.split('-').map(Number);
   const [ch, cmin] = currentTime.split(':').map(Number);
   const currentSimDateTime = new Date(cy, cm - 1, cd, ch, cmin);
   const beforeFirstKickoff = currentSimDateTime < firstMatchKickoff;
 
-  const groupMatches = matches.filter(m => m.matchday <= 3);
-  const allGroupFinished = groupMatches.every(m => m.status === 'finished');
+  const windowOpen = isWinnerPredictionWindowOpen(matches, currentSimDateTime);
 
   const userPrediction = activeMemberInfo?.winnerPrediction;
   const predictionCount = activeMemberInfo?.winnerPredictionCount || 1;
   const isEliminated = userPrediction ? isTeamEliminated(userPrediction, matches) : false;
 
-  const canChangePrediction = beforeFirstKickoff || allGroupFinished || !userPrediction || isEliminated;
-  const requiresAd = !beforeFirstKickoff && (allGroupFinished || isEliminated) && !!userPrediction;
+  const canChangePrediction = windowOpen && (beforeFirstKickoff || !userPrediction || isEliminated);
+  const requiresAd = !beforeFirstKickoff && windowOpen && isEliminated && !!userPrediction;
 
   const availableTeams = useMemo(() => {
     if (beforeFirstKickoff) {
@@ -7464,8 +7508,13 @@ export function WinnerPredictionWidget({
   const handlePredictWinner = async (team: string) => {
     if (!activeGroup || !activeMemberInfo || !dbWriteGroup) return;
 
-    if (!canChangePrediction) {
-      alert("Winner predictions are locked during the Group Stage!");
+    if (!windowOpen) {
+      alert("Winner predictions are locked during the stages! They only reopen between stages.");
+      return;
+    }
+
+    if (!beforeFirstKickoff && userPrediction && !isEliminated) {
+      alert("You can only change your prediction if your predicted team has been eliminated!");
       return;
     }
 
@@ -7486,7 +7535,7 @@ export function WinnerPredictionWidget({
       };
       try {
         await dbWriteGroup(updatedGroup);
-        const factor = Math.pow(0.5, newCount - 1);
+        const factor = newCount > 1 ? 0.5 : 1.0;
         const payout = Math.round(activeGroup.startingBudget * factor);
         await writeChatMessage(`${currentUser.username} predicted ${team} to win the 2026 World Cup! 🏆 (Prediction #${newCount}, potential payout: ${payout} credits)`, 'activity');
         alert(`Successfully predicted ${team} as the tournament winner!`);
@@ -7516,9 +7565,9 @@ export function WinnerPredictionWidget({
           <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', margin: 0 }}>
             {beforeFirstKickoff 
               ? "Free to bet! Predict the World Cup winner before kickoff. Correct guess pays 100% of starting budget credits!" 
-              : !allGroupFinished
-                ? "Locked during the Group Stage. Re-opens during knockouts."
-                : "Watch a 1-minute video ad to change your prediction. Payout scales down with subsequent predictions (100% -> 50% -> 25%...)."
+              : !windowOpen
+                ? "Locked during the stages. Re-opens between stages (after group stage and after each knockout stage) if your team is eliminated."
+                : "Watch a 1-minute video ad to change your prediction. Correct guess pays 50% of starting budget credits."
             }
           </p>
         </div>
@@ -7543,7 +7592,7 @@ export function WinnerPredictionWidget({
           
           {userPrediction && (
             <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
-              (Prediction #{predictionCount}, Potential Payout: {Math.round((activeGroup?.startingBudget || 500) * Math.pow(0.5, predictionCount - 1))} pts)
+              (Prediction #{predictionCount}, Potential Payout: {Math.round((activeGroup?.startingBudget || 500) * (predictionCount > 1 ? 0.5 : 1.0))} pts)
             </span>
           )}
         </div>

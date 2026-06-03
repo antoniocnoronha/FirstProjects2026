@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import '@testing-library/jest-dom';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { TeamFlag, ChatTab } from './App';
+import { TeamFlag, ChatTab, isWinnerPredictionWindowOpen, getMatchDateTime } from './App';
 import type { ChatMessage, User } from './types';
 
 describe('TeamFlag Component', () => {
@@ -87,3 +87,44 @@ describe('ChatTab Component', () => {
     expect(handleSendMessage).toHaveBeenCalledWith('My new message', 'chat');
   });
 });
+
+describe('Winner Prediction Logic Helpers', () => {
+  it('should parse match date and time correctly', () => {
+    const match = { date: '2026-06-11', kickoffTime: '20:00' } as any;
+    const dt = getMatchDateTime(match);
+    expect(dt.getFullYear()).toBe(2026);
+    expect(dt.getMonth()).toBe(5); // June
+    expect(dt.getDate()).toBe(11);
+    expect(dt.getHours()).toBe(20);
+    expect(dt.getMinutes()).toBe(0);
+  });
+
+  it('should allow prediction before first match kickoff', () => {
+    const mockMatches = [
+      { id: 'm-1', date: '2026-06-11', kickoffTime: '20:00', matchday: 1, status: 'scheduled' }
+    ] as any[];
+    const currentSimTime = new Date(2026, 5, 11, 19, 0); // 1 hour before kickoff
+    expect(isWinnerPredictionWindowOpen(mockMatches, currentSimTime)).toBe(true);
+  });
+
+  it('should lock prediction during group stage matches', () => {
+    const mockMatches = [
+      { id: 'm-1', date: '2026-06-11', kickoffTime: '20:00', matchday: 1, status: 'finished' },
+      { id: 'm-2', date: '2026-06-12', kickoffTime: '20:00', matchday: 1, status: 'scheduled' }
+    ] as any[];
+    const currentSimTime = new Date(2026, 5, 11, 22, 0); // after m-1 kickoff but before m-2
+    expect(isWinnerPredictionWindowOpen(mockMatches, currentSimTime)).toBe(false);
+  });
+
+  it('should reopen prediction between group stage and round of 32', () => {
+    const mockMatches = [
+      { id: 'm-1', date: '2026-06-11', kickoffTime: '20:00', matchday: 1, status: 'finished' },
+      { id: 'm-2', date: '2026-06-25', kickoffTime: '02:00', matchday: 3, status: 'finished' },
+      { id: 'm-73', date: '2026-06-28', kickoffTime: '20:00', matchday: 4, status: 'scheduled' }
+    ] as any[];
+    // Simulated time: 2026-06-26 10:00 (after group stage finishes, before R32 starts)
+    const currentSimTime = new Date(2026, 5, 26, 10, 0);
+    expect(isWinnerPredictionWindowOpen(mockMatches, currentSimTime)).toBe(true);
+  });
+});
+

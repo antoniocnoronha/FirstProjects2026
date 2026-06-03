@@ -40,9 +40,12 @@ service cloud.firestore {
         (request.resource.data.adminId == resource.data.adminId &&
          request.resource.data.name == resource.data.name &&
          request.resource.data.startingBudget == resource.data.startingBudget &&
-         request.resource.data.allowCombos == resource.data.allowCombos &&
-         request.resource.data.allowOverdraft == resource.data.allowOverdraft &&
-         request.resource.data.seasonStarted == resource.data.seasonStarted &&
+         request.resource.data.get('allowCombos', true) == resource.data.get('allowCombos', true) &&
+         request.resource.data.get('allowOverdraft', true) == resource.data.get('allowOverdraft', true) &&
+         request.resource.data.get('seasonStarted', false) == resource.data.get('seasonStarted', false) &&
+         request.resource.data.get('toggle3MatchBonus', true) == resource.data.get('toggle3MatchBonus', true) &&
+         request.resource.data.get('toggleMdBonus', true) == resource.data.get('toggleMdBonus', true) &&
+         request.resource.data.get('mdBonusPoints', 100) == resource.data.get('mdBonusPoints', 100) &&
          // Ensure member change is only modifying the current user's entry
          request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([request.auth.uid]))
       );
