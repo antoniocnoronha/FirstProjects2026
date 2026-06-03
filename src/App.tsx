@@ -1641,8 +1641,39 @@ export default function App() {
         setOddsSyncStatus('Synced Today at 08:00 AM UK via Scraped Odds Feed');
       }
     } catch (err: any) {
-      console.error(err);
-      setOddsSyncStatus('Sync Failed. Used offline baseline odds.');
+      console.error('Odds API sync failed, falling back to scraped simulator', err);
+      
+      // Notify user about API key quota/limit issues
+      if (source === 'api') {
+        showNotification(
+          "The Odds API key is invalid or has reached its usage limit. Falling back to simulated live odds. You can paste your own free key in Settings.",
+          "warning"
+        );
+      }
+
+      // Automatically fall back to scraped/simulated live odds
+      try {
+        const dayMatches = matches.filter(m => m.date === targetDate);
+        if (dayMatches.length > 0) {
+          const scrapedOdds = await scrapeDailyOddsFeed(dayMatches);
+          const updated = matches.map(m => {
+            if (m.date === targetDate && scrapedOdds[m.id]) {
+              return {
+                ...m,
+                ...scrapedOdds[m.id]
+              };
+            }
+            return m;
+          });
+          await dbWriteMatches(updated);
+          setOddsSyncStatus('Synced Today at 08:00 AM UK via Simulated Live Odds (API fallback)');
+        } else {
+          setOddsSyncStatus('API Sync Failed. Used offline baseline odds.');
+        }
+      } catch (fallbackErr) {
+        console.error('Fallback scraped odds synchronization failed', fallbackErr);
+        setOddsSyncStatus('Sync Failed. Used offline baseline odds.');
+      }
     } finally {
       setIsSyncingOdds(false);
     }
@@ -3603,25 +3634,30 @@ export default function App() {
           </div>
 
           {activeGroup && (
-            <button
-              onClick={copyInviteLink}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px',
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px dashed var(--border-color)',
-                borderRadius: '8px',
-                padding: '8px',
-                fontSize: '11px',
-                color: 'var(--color-primary)',
-                marginTop: '6px'
-              }}
-            >
-              <Share2 size={12} />
-              {copiedLink ? 'Link Copied!' : 'Copy Direct Share Link'}
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
+              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textAlign: 'center' }}>
+                Active League Code: <span style={{ color: 'var(--color-text)', fontWeight: '700', letterSpacing: '1px' }}>{activeGroup.inviteCode}</span>
+              </div>
+              <button
+                onClick={copyInviteLink}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px dashed var(--border-color)',
+                  borderRadius: '8px',
+                  padding: '8px',
+                  fontSize: '11px',
+                  color: 'var(--color-primary)',
+                  width: '100%'
+                }}
+              >
+                <Share2 size={12} />
+                {copiedLink ? 'Link Copied!' : 'Copy Direct Share Link'}
+              </button>
+            </div>
           )}
         </div>
 
