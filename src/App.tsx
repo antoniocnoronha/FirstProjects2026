@@ -761,7 +761,7 @@ export default function App() {
     const defaultGroup: Group = {
       id: 'group-1',
       name: 'Qatar-2022 Rematch League',
-      inviteCode: 'WORLD-CUP-26',
+      inviteCode: 'FIFA26',
       adminId: 'user-1',
       startingBudget: 500,
       toggle3MatchBonus: true,
@@ -959,6 +959,15 @@ export default function App() {
 
   // --- UI Interactions State ---
   const [inviteInput, setInviteInput] = useState<string>('');
+  const [pendingInviteCode, setPendingInviteCode] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('invite');
+    if (code) {
+      window.history.replaceState({}, document.title, window.location.pathname || '/');
+      return code.trim().toUpperCase();
+    }
+    return null;
+  });
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
   const [selectedMemberForHistory, setSelectedMemberForHistory] = useState<GroupMember | null>(null);
   const [betsToAcknowledge, setBetsToAcknowledge] = useState<any[]>([]);
@@ -1212,7 +1221,7 @@ export default function App() {
           const defaultGroup: Group = {
             id: 'group-1',
             name: 'Qatar-2022 Rematch League',
-            inviteCode: 'WORLD-CUP-26',
+            inviteCode: 'FIFA26',
             adminId: firebaseUser.uid,
             startingBudget: 500,
             toggle3MatchBonus: true,
@@ -1396,16 +1405,45 @@ export default function App() {
     syncResultsOnTimeChange();
   }, [currentDate, currentTime]);
 
-  // --- Handle Shared Invite Links on Mount ---
+  // --- Handle Shared Invite Links ---
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('invite');
-    if (code) {
-      setInviteInput(code);
-      // Clean query parameter after reading
-      window.history.replaceState({}, document.title, window.location.pathname);
+    if (!pendingInviteCode || groups.length === 0 || !currentUser?.id) return;
+    
+    const targetGroup = groups.find(g => g.inviteCode.toUpperCase() === pendingInviteCode);
+    if (targetGroup) {
+      if (targetGroup.members[currentUser.id]) {
+        setActiveGroupId(targetGroup.id);
+      } else {
+        // Auto-join
+        const newMember = {
+          userId: currentUser.id,
+          username: currentUser.username,
+          balance: targetGroup.startingBudget,
+          correctCount: 0,
+          totalBetsCount: 0,
+          winRate: 0,
+          noLossUsed: 0,
+          doubleChanceUsed: 0,
+          doublePointsUsed: 0
+        };
+        const updatedGroup = {
+          ...targetGroup,
+          members: {
+            ...targetGroup.members,
+            [currentUser.id]: newMember
+          }
+        };
+        dbWriteGroup(updatedGroup).then(() => {
+          setActiveGroupId(targetGroup.id);
+          alert(`Successfully joined league: ${targetGroup.name}! 🎉`);
+        });
+      }
+    } else {
+      alert(`League with code "${pendingInviteCode}" not found.`);
     }
-  }, []);
+    
+    setPendingInviteCode(null);
+  }, [pendingInviteCode, groups, currentUser?.id]);
 
   // --- Derived Values ---
   const activeGroup = useMemo(() => {
@@ -1502,7 +1540,16 @@ export default function App() {
     e.preventDefault();
     if (!newGroupName.trim()) return;
 
-    const newCode = Math.random().toString(36).substring(2, 8).toUpperCase() + '-26';
+    let newCode = '';
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let isUnique = false;
+    while (!isUnique) {
+      newCode = '';
+      for (let i = 0; i < 6; i++) {
+        newCode += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      isUnique = !groups.some(g => g.inviteCode.toUpperCase() === newCode);
+    }
     const newId = 'group-' + Math.random().toString(36).substring(2, 9);
     const newGroup: Group = {
       id: newId,
@@ -2677,7 +2724,7 @@ export default function App() {
           const defaultGroup: Group = {
             id: 'group-1',
             name: 'Qatar-2022 Rematch League',
-            inviteCode: 'WORLD-CUP-26',
+            inviteCode: 'FIFA26',
             adminId: currentUser.id,
             startingBudget: 500,
             toggle3MatchBonus: true,
@@ -3534,7 +3581,7 @@ export default function App() {
           <div style={{ display: 'flex', gap: '6px' }}>
             <input
               type="text"
-              placeholder="CODE-26"
+              placeholder="FIFA26"
               value={inviteInput}
               onChange={(e) => setInviteInput(e.target.value)}
               style={{ fontSize: '12px', padding: '8px', flex: 1 }}
